@@ -80,69 +80,6 @@ solana-validator --identity $HOME/x1_validator/identity.json --vote-account $HOM
 <hr>
 &nbsp;
 
-
-## 🚀 Running the Validator
-
-As part of the setup, the script attempts to **request 5 SOL (XN)** into the **identity wallet** using the **Xolana network faucet** at: [https://xolana.xen.network/web_faucet](https://xolana.xen.network/web_faucet).
-
-**Note:** The faucet has a limitation of **5 SOL (XN) per hour per account**.
-
-This SOL (XN) in the identity wallet is required to:
-
-- **Cover transaction fees** (e.g., votes, on-chain operations)
-- **Initialize accounts** like the vote and stake accounts
-
-
-### Staking with Available SOL (XN)
-
-After creating the vote account, the script automatically stakes the **maximum available SOL (XN)**, leaving a small buffer (e.g., **0.5 SOL (XN)**) for transaction fees. This means the initial stake amount may be less than the recommended amount due to faucet limitations.
-
-You can **start the validator** with this initial stake, but to maximize participation and potential rewards, you may want to **increase your stake later**.
-
-
-### Increasing Your Stake
-
-To increase your stake:
-
-1. **Wait for the faucet cooldown** (typically **1 hour per account**) and request additional SOL (XN) from the faucet.
-
-2. **Fund your identity wallet** with the additional SOL (XN) by running:
-
-   ```bash
-   # Request additional SOL (XN) from the faucet
-   curl -s -X POST -H "Content-Type: application/json" -d "{"pubkey":"<your_identity_pubkey>"}" https://xolana.xen.network/faucet
-   ```
-
-   Replace `<your_identity_pubkey>` with your actual identity public key.
-
-3. **Delegate the additional SOL (XN)** to your existing stake account or create a new stake account:
-
-   ```bash
-   # Check your current balance
-   solana balance $HOME/x1_validator/identity.json
-
-   # Create a new stake account (optional)
-   solana-keygen new --no-passphrase --outfile $HOME/x1_validator/new_stake.json
-   solana create-stake-account $HOME/x1_validator/new_stake.json <amount_to_stake>
-
-   # Delegate stake to your vote account
-   solana delegate-stake $HOME/x1_validator/new_stake.json $HOME/x1_validator/vote.json
-   ```
-
-   **Note:** Replace `<amount_to_stake>` with the amount you wish to stake.
-
-
-### SOL (XN) - Distribution Recommendations
-
-- **Identity Wallet**: Keep at least **0.5 SOL (XN)** to cover fees for essential operations.
-- **Stake Account**: Stake as much SOL (XN) as possible to maximize rewards, considering the faucet limitations.
-
-
-&nbsp;
-<hr>
-&nbsp;
-
-
 ## 🎥 One-Liner Video Demo
 One-Liner Video Demo: [https://x.com/xenpub/status/1846402568030757357](https://x.com/xenpub/status/1846402568030757357)
 
