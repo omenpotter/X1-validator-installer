@@ -209,6 +209,114 @@ print_color "success" "System tuned for validator performance."
 
 # Section 10: Create and Start Validator Service
 print_color "info" "\n===== 10/10: Finished ====="
+
+#!/bin/bash
+
+# Function to print colored messages
+print_color() {
+    case "$1" in
+        "info") echo -e "\e[34m[INFO]\e[0m $2" ;;
+        "success") echo -e "\e[32m[SUCCESS]\e[0m $2" ;;
+        "error") echo -e "\e[31m[ERROR]\e[0m $2" ;;
+        "prompt") echo -e "\e[33m[PROMPT]\e[0m $2" ;;
+        *) echo "$2" ;;
+    esac
+}
+
+# Set the installation directory
+install_dir="$HOME/x1_validator"
+mkdir -p "$install_dir"
+
+# Check for required keypairs
+print_color "info" "Checking for required keypairs..."
+if [ ! -f "$install_dir/identity.json" ] || [ ! -f "$install_dir/vote.json" ] || [ ! -f "$install_dir/stake.json" ]; then
+    print_color "error" "Required keypair files not found in $install_dir. Exiting."
+    exit 1
+fi
+print_color "success" "All keypair files are present."
+
+# Set Solana CLI to use withdrawer keypair
+print_color "info" "Configuring Solana CLI to use the withdrawer keypair..."
+solana config set -k "$HOME/.config/solana/withdrawer.json"
+if [ $? -eq 0 ]; then
+    print_color "success" "Switched to withdrawer keypair."
+else
+    print_color "error" "Failed to switch to withdrawer keypair."
+    exit 1
+fi
+
+# Fund the withdrawer with 5 SOL from the faucet
+print_color "info" "Funding withdrawer wallet with 5 SOL from faucet..."
+withdrawer_pubkey=$(solana-keygen pubkey "$HOME/.config/solana/withdrawer.json")
+
+curl -s -X POST -H "Content-Type: application/json" -d "{\"pubkey\":\"$withdrawer_pubkey\"}" https://xolana.xen.network/web_faucet
+print_color "info" "Waiting 30 seconds to confirm faucet funds..."
+sleep 30
+balance=$(solana balance "$withdrawer_pubkey" | awk '{print $1}')
+if (( $(echo "$balance >= 5" | bc -l) )); then
+    print_color "success" "Withdrawer wallet funded with $balance SOL."
+else
+    print_color "error" "Failed to get 5 SOL in the withdrawer wallet. Exiting."
+    exit 1
+fi
+
+# Change directory to validator installation directory
+cd "$install_dir"
+
+# Create the stake account
+print_color "info" "Creating stake account with 2 SOL..."
+solana create-stake-account "$install_dir/stake.json" 2
+if [ $? -eq 0 ]; then
+    print_color "success" "Stake account created."
+else
+    print_color "error" "Failed to create stake account."
+    exit 1
+fi
+
+# Create the vote account with 10% commission
+print_color "info" "Creating vote account with 10% commission..."
+solana create-vote-account "$install_dir/vote.json" "$install_dir/identity.json" "$withdrawer_pubkey" --commission 10
+if [ $? -eq 0 ]; then
+    print_color "success" "Vote account created."
+else
+    print_color "error" "Failed to create vote account."
+    exit 1
+fi
+
+# Delegate the stake
+print_color "info" "Delegating the stake to the vote account..."
+solana delegate-stake "$install_dir/stake.json" "$install_dir/vote.json"
+if [ $? -eq 0 ]; then
+    print_color "success" "Stake successfully delegated."
+else
+    print_color "error" "Failed to delegate stake."
+    exit 1
+fi
+
+# Switch RPC URL to the new endpoint
+print_color "info" "Setting Solana CLI to use the new RPC endpoint..."
+solana config set -u https://xolana.xen.network
+network_url=$(solana config get | grep 'RPC URL' | awk '{print $NF}')
+if [ "$network_url" == "https://xolana.xen.network" ]; then
+    print_color "success" "RPC URL set to $network_url."
+else
+    print_color "error" "Failed to set RPC URL."
+    exit 1
+fi
+
+# Start the validator
+print_color "info" "Starting the Solana validator..."
+print_color "prompt" "Run the following command to start your validator:"
+echo -e "\nexport PATH=\"\$HOME/.local/share/solana/install/active_release/bin:\$PATH\"; \\
+ulimit -n 1000000; \\
+solana-validator --identity $install_dir/identity.json --vote-account $install_dir/vote.json --rpc-port 8899 \\
+--entrypoint 216.202.227.220:8001 --full-rpc-api --log - --max-genesis-archive-unpacked-size 1073741824 \\
+--no-incremental-snapshots --require-tower --enable-rpc-transaction-history \\
+--enable-extended-tx-metadata-storage --skip-startup-ledger-verification \\
+--no-poh-speed-test --bind-address 0.0.0.0"
+
+print_color "success" "Script execution completed. Validator setup is ready."
+
 print_color "success" "\nX1 Validator setup complete!"
 print_color "success" "\nStart your X1 Validator by using the following command:"
 print_color "prompt" "\nexport PATH=\"\$HOME/.local/share/solana/install/active_release/bin:\$PATH\"; ulimit -n 1000000; solana-validator --identity $install_dir/identity.json --vote-account $install_dir/vote.json --rpc-port 8899 --entrypoint 216.202.227.220:8001 --full-rpc-api --log - --max-genesis-archive-unpacked-size 1073741824 --no-incremental-snapshots --require-tower --enable-rpc-transaction-history --enable-extended-tx-metadata-storage --skip-startup-ledger-verification --no-poh-speed-test --bind-address 0.0.0.0"
