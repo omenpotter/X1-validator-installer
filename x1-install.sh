@@ -154,23 +154,31 @@ solana config set --keypair $install_dir/identity.json
 # Section 7: Create Vote Account with Commission 5%
 print_color "info" "\n===== 7/10: Creating Vote Account ====="
 
-solana create-vote-account $install_dir/vote.json $install_dir/identity.json $withdrawer_pubkey --commission 5
-if [ $? -eq 0 ]; then
-    print_color "success" "Vote account created with 5% commission."
+vote_amount=1.5  # Fixed amount for vote account
+
+if (( $(echo "$balance >= $vote_amount" | bc -l) )); then
+    solana create-vote-account $install_dir/vote.json $install_dir/identity.json $withdrawer_pubkey --commission 5
+    if [ $? -eq 0 ]; then
+        print_color "success" "Vote account created with 5% commission."
+    else
+        print_color "error" "Failed to create vote account."
+        exit 1
+    fi
+
+    # Check balance after creating vote account
+    balance=$(solana balance $identity_pubkey | awk '{print $1}')
+    print_color "info" "Balance after creating vote account: $balance SOL"
 else
-    print_color "error" "Failed to create vote account."
+    print_color "error" "Insufficient funds to create vote account."
     exit 1
 fi
-
-# Check balance after creating vote account
-balance=$(solana balance $identity_pubkey | awk '{print $1}')
-print_color "info" "Balance after creating vote account: $balance SOL"
 
 # Section 8: Create and Fund Stake Account
 print_color "info" "\n===== 8/10: Creating Stake Account ====="
 
-if (( $(echo "$balance > 0.5" | bc -l) )); then
-    stake_amount=$(echo "$balance - 0.5" | bc)
+stake_amount=1.5  # Fixed amount for stake account
+
+if (( $(echo "$balance >= $stake_amount" | bc -l) )); then
     print_color "info" "Staking $stake_amount SOL."
 
     solana create-stake-account $install_dir/stake.json $stake_amount
@@ -226,9 +234,9 @@ print_color "success" "All keypair files are present."
 print_color "info" "Setting default keypair to identity keypair..."
 solana config set --keypair "$install_dir/identity.json"
 
-# Fund the withdrawer wallet with 2 SOL from the identity wallet
-print_color "info" "Funding withdrawer wallet with 2 SOL from identity wallet..."
-solana transfer "$withdrawer_pubkey" 2 --from "$install_dir/identity.json" --allow-unfunded-recipient --fee-payer "$install_dir/identity.json"
+# Fund the withdrawer wallet with 1.5 SOL from the identity wallet
+print_color "info" "Funding withdrawer wallet with 1.5 SOL from identity wallet..."
+solana transfer "$withdrawer_pubkey" 1.5 --from "$install_dir/identity.json" --allow-unfunded-recipient --fee-payer "$install_dir/identity.json"
 
 # Verify if the transfer was successful
 if [ $? -eq 0 ]; then
@@ -238,11 +246,11 @@ if [ $? -eq 0 ]; then
     if (( $(echo "$balance >= 2" | bc -l) )); then
         print_color "success" "Withdrawer wallet funded with $balance SOL."
     else
-        print_color "error" "Failed to get 2 SOL in the withdrawer wallet. Exiting."
+        print_color "error" "Failed to get 1.5 SOL in the withdrawer wallet. Exiting."
         exit 1
     fi
 else
-    print_color "error" "Failed to transfer 2 SOL from the identity wallet. Exiting."
+    print_color "error" "Failed to transfer 1.5 SOL from the identity wallet. Exiting."
     exit 1
 fi
 
