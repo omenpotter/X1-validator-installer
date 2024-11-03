@@ -232,21 +232,27 @@ else
     exit 1
 fi
 
-# Fund the withdrawer with 2 SOL from the faucet
-print_color "info" "Funding withdrawer wallet with 2 SOL from faucet..."
+# Get the public keys for the identity and withdrawer wallets
+identity_pubkey=$(solana-keygen pubkey "$HOME/omencult/x1_validator/identity.json")
 withdrawer_pubkey=$(solana-keygen pubkey "$HOME/.config/solana/withdrawer.json")
 
-# Perform the faucet request and suppress any output (including errors)
-curl -s -o /dev/null -X POST -H "Content-Type: application/json" \
-     -d "{\"pubkey\":\"$withdrawer_pubkey\"}" https://xolana.xen.network/web_faucet
+# Fund the withdrawer wallet with 2 SOL from the identity wallet
+print_color "info" "Funding withdrawer wallet with 2 SOL from identity wallet..."
+solana transfer "$withdrawer_pubkey" 2 --from "$identity_pubkey" --allow-unfunded-recipient --fee-payer "$identity_pubkey"
 
-print_color "info" "Waiting 30 seconds to confirm faucet funds..."
-sleep 30
-balance=$(solana balance "$withdrawer_pubkey" | awk '{print $1}')
-if (( $(echo "$balance >= 2" | bc -l) )); then
-    print_color "success" "Withdrawer wallet funded with $balance SOL."
+# Verify if the transfer was successful
+if [ $? -eq 0 ]; then
+    print_color "info" "Waiting 30 seconds to confirm funds in withdrawer wallet..."
+    sleep 30
+    balance=$(solana balance "$withdrawer_pubkey" | awk '{print $1}')
+    if (( $(echo "$balance >= 2" | bc -l) )); then
+        print_color "success" "Withdrawer wallet funded with $balance SOL."
+    else
+        print_color "error" "Failed to get 2 SOL in the withdrawer wallet. Exiting."
+        exit 1
+    fi
 else
-    print_color "error" "Failed to get 2 SOL in the withdrawer wallet. Exiting."
+    print_color "error" "Failed to transfer 2 SOL from the identity wallet. Exiting."
     exit 1
 fi
 
