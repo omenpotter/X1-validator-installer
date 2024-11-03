@@ -129,7 +129,7 @@ request_faucet() {
         wait_message=$(echo "$response" | sed -n 's/.*"message":"\([^"]*\)".*/\1/p')
         print_color "error" "Faucet request failed: $wait_message"
     elif echo "$response" | grep -q '"success":true'; then
-        print_color "success" "3 SOL requested successfully."
+        print_color "success" "2 SOL requested successfully."
     else
         print_color "error" "Faucet request failed. Response: $response"
     fi
