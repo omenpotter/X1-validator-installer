@@ -210,19 +210,6 @@ print_color "success" "System tuned for validator performance."
 # Section 10: Create and Start Validator Service
 print_color "info" "\n===== 10/10: Finished ====="
 
-#!/bin/bash
-
-# Function to print colored messages
-print_color() {
-    case "$1" in
-        "info") echo -e "\e[34m[INFO]\e[0m $2" ;;
-        "success") echo -e "\e[32m[SUCCESS]\e[0m $2" ;;
-        "error") echo -e "\e[31m[ERROR]\e[0m $2" ;;
-        "prompt") echo -e "\e[33m[PROMPT]\e[0m $2" ;;
-        *) echo "$2" ;;
-    esac
-}
-
 # Set the installation directory
 install_dir="$HOME/x1_validator"
 mkdir -p "$install_dir"
