@@ -245,18 +245,21 @@ else
     exit 1
 fi
 
-# Fund the withdrawer with 2.5 SOL from the faucet
-print_color "info" "Funding withdrawer wallet with 2.5 SOL from faucet..."
+# Fund the withdrawer with 2 SOL from the faucet
+print_color "info" "Funding withdrawer wallet with 2 SOL from faucet..."
 withdrawer_pubkey=$(solana-keygen pubkey "$HOME/.config/solana/withdrawer.json")
 
-curl -s -X POST -H "Content-Type: application/json" -d "{\"pubkey\":\"$withdrawer_pubkey\"}" https://xolana.xen.network/web_faucet
+# Perform the faucet request and suppress any output (including errors)
+curl -s -o /dev/null -X POST -H "Content-Type: application/json" \
+     -d "{\"pubkey\":\"$withdrawer_pubkey\"}" https://xolana.xen.network/web_faucet
+
 print_color "info" "Waiting 30 seconds to confirm faucet funds..."
 sleep 30
 balance=$(solana balance "$withdrawer_pubkey" | awk '{print $1}')
-if (( $(echo "$balance >= 2.5" | bc -l) )); then
+if (( $(echo "$balance >= 2" | bc -l) )); then
     print_color "success" "Withdrawer wallet funded with $balance SOL."
 else
-    print_color "error" "Failed to get 2.5 SOL in the withdrawer wallet. Exiting."
+    print_color "error" "Failed to get 2 SOL in the withdrawer wallet. Exiting."
     exit 1
 fi
 
