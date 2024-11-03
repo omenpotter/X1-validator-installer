@@ -129,7 +129,7 @@ request_faucet() {
         wait_message=$(echo "$response" | sed -n 's/.*"message":"\([^"]*\)".*/\1/p')
         print_color "error" "Faucet request failed: $wait_message"
     elif echo "$response" | grep -q '"success":true'; then
-        print_color "success" "2 SOL requested successfully."
+        print_color "success" "5 SOL requested successfully."
     else
         print_color "error" "Faucet request failed. Response: $response"
     fi
@@ -222,23 +222,13 @@ if [ ! -f "$install_dir/identity.json" ] || [ ! -f "$install_dir/vote.json" ] ||
 fi
 print_color "success" "All keypair files are present."
 
-# Set Solana CLI to use withdrawer keypair
-print_color "info" "Configuring Solana CLI to use the withdrawer keypair..."
-solana config set -k "$HOME/.config/solana/withdrawer.json"
-if [ $? -eq 0 ]; then
-    print_color "success" "Switched to withdrawer keypair."
-else
-    print_color "error" "Failed to switch to withdrawer keypair."
-    exit 1
-fi
-
-# Get the public keys for the identity and withdrawer wallets
-identity_pubkey=$(solana-keygen pubkey "$HOME/omencult/x1_validator/identity.json")
-withdrawer_pubkey=$(solana-keygen pubkey "$HOME/.config/solana/withdrawer.json")
+# Set the default keypair to identity keypair
+print_color "info" "Setting default keypair to identity keypair..."
+solana config set --keypair "$install_dir/identity.json"
 
 # Fund the withdrawer wallet with 2 SOL from the identity wallet
 print_color "info" "Funding withdrawer wallet with 2 SOL from identity wallet..."
-solana transfer "$withdrawer_pubkey" 2 --from "$identity_pubkey" --allow-unfunded-recipient --fee-payer "$identity_pubkey"
+solana transfer "$withdrawer_pubkey" 2 --from "$install_dir/identity.json" --allow-unfunded-recipient --fee-payer "$install_dir/identity.json"
 
 # Verify if the transfer was successful
 if [ $? -eq 0 ]; then
@@ -253,6 +243,16 @@ if [ $? -eq 0 ]; then
     fi
 else
     print_color "error" "Failed to transfer 2 SOL from the identity wallet. Exiting."
+    exit 1
+fi
+
+# Set Solana CLI to use withdrawer keypair
+print_color "info" "Configuring Solana CLI to use the withdrawer keypair..."
+solana config set -k "$HOME/.config/solana/withdrawer.json"
+if [ $? -eq 0 ]; then
+    print_color "success" "Switched to withdrawer keypair."
+else
+    print_color "error" "Failed to switch to withdrawer keypair."
     exit 1
 fi
 
