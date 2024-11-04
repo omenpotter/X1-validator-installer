@@ -234,9 +234,16 @@ print_color "success" "All keypair files are present."
 print_color "info" "Setting default keypair to identity keypair..."
 solana config set --keypair "$install_dir/identity.json"
 
+# Get the public key of the withdrawer wallet
+withdrawer_pubkey=$(solana address -k "$HOME/.config/solana/withdrawer.json")
+
 # Fund the withdrawer wallet with 1.5 SOL from the identity wallet
 print_color "info" "Funding withdrawer wallet with 1.5 SOL from identity wallet..."
-solana transfer "$withdrawer_pubkey" 1.5 --from "$install_dir/identity.json" --allow-unfunded-recipient --fee-payer "$install_dir/identity.json"
+transfer_output=$(solana transfer "$withdrawer_pubkey" 1.5 --from "$install_dir/identity.json" --allow-unfunded-recipient --fee-payer "$install_dir/identity.json" 2>&1)
+if [ $? -ne 0 ]; then
+    print_color "error" "Failed to transfer 1.5 SOL from the identity wallet: $transfer_output"
+    exit 1
+fi
 
 # Set Solana CLI to use withdrawer keypair
 print_color "info" "Configuring Solana CLI to use the withdrawer keypair..."
@@ -252,18 +259,21 @@ fi
 check_withdrawer_balance
 
 # Verify if the transfer was successful
-if [ $? -eq 0 ]; then
-    print_color "info" "Waiting 30 seconds to confirm funds in withdrawer wallet..."
-    sleep 30
-    balance=$(solana balance "$withdrawer_pubkey" | awk '{print $1}')
+print_color "info" "Waiting 30 seconds to confirm funds in withdrawer wallet..."
+sleep 30
+balance=$(solana balance "$withdrawer_pubkey" | awk '{print $1}')
+
+# Verify that the balance is a valid number
+if [[ $balance =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    # Check if the balance is greater than or equal to 1.5 SOL
     if (( $(echo "$balance >= 1.5" | bc -l) )); then
         print_color "success" "Withdrawer wallet funded with $balance SOL."
     else
-        print_color "error" "Failed to get 1.5 SOL in the withdrawer wallet. Exiting."
+        print_color "error" "Failed to get 1.5 SOL in the withdrawer wallet. Current balance is $balance SOL."
         exit 1
     fi
 else
-    print_color "error" "Failed to transfer 1.5 SOL from the identity wallet. Exiting."
+    print_color "error" "Error: Unable to fetch a valid balance. Current output: $balance"
     exit 1
 fi
 
