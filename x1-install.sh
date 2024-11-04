@@ -256,7 +256,6 @@ else
 fi
 
 # Call the function to check the balance
-check_withdrawer_balance
 
 # Verify if the transfer was successful
 print_color "info" "Waiting 30 seconds to confirm funds in withdrawer wallet..."
@@ -281,8 +280,8 @@ fi
 cd "$install_dir"
 
 # Create the stake account
-print_color "info" "Creating stake account with 2 SOL..."
-solana create-stake-account "$install_dir/stake.json" 2
+print_color "info" "Creating stake account with 1 SOL..."
+solana create-stake-account "$install_dir/stake.json" 1
 if [ $? -eq 0 ]; then
     print_color "success" "Stake account created."
 else
