@@ -239,11 +239,30 @@ print_color "info" "Funding withdrawer wallet with 1.5 SOL from identity wallet.
 solana transfer "$withdrawer_pubkey" 1.5 --from "$install_dir/identity.json" --allow-unfunded-recipient --fee-payer "$install_dir/identity.json"
 
 # Verify if the transfer was successful
+attempt=0
+max_attempts=5
+while [ $attempt -lt $max_attempts ]; do
+    balance=$(solana balance $withdrawer_pubkey | awk '{print $1}')
+    if (( $(echo "$balance >= 1.5" | bc -l) )); then
+        print_color "success" "Withdrawer wallet funded with $balance SOL."
+        break
+    else
+        attempt=$(( $attempt + 1 ))
+        print_color "info" "Attempt $attempt/$max_attempts: Waiting for funds to appear in withdrawer wallet..."
+        sleep 30  # Wait before retrying
+    fi
+done
+
+if [ $attempt -eq $max_attempts ]; then
+    print_color "error" "Failed to get 1.5 SOL in the withdrawer wallet. Exiting."
+    exit 1
+fi
+
 if [ $? -eq 0 ]; then
     print_color "info" "Waiting 30 seconds to confirm funds in withdrawer wallet..."
     sleep 30
     balance=$(solana balance "$withdrawer_pubkey" | awk '{print $1}')
-    if (( $(echo "$balance >= 2" | bc -l) )); then
+    if (( $(echo "$balance >= 1.5" | bc -l) )); then
         print_color "success" "Withdrawer wallet funded with $balance SOL."
     else
         print_color "error" "Failed to get 1.5 SOL in the withdrawer wallet. Exiting."
