@@ -81,7 +81,7 @@ source ~/.profile
 # Section 4: Switch to Xolana Network
 print_color "info" "\n===== 4/10: Switch to Xolana Network ====="
 
-solana config set -u https://xolana.xen.network:8899 > /dev/null 2>&1
+solana config set -u http://xolana.xen.network:8899 > /dev/null 2>&1
 network_url=$(solana config get | grep 'RPC URL' | awk '{print $NF}')
 if [ "$network_url" != "https://xolana.xen.network:8899" ]; then
     print_color "error" "Failed to switch to Xolana network."
