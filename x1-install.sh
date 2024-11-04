@@ -238,26 +238,20 @@ solana config set --keypair "$install_dir/identity.json"
 print_color "info" "Funding withdrawer wallet with 1.5 SOL from identity wallet..."
 solana transfer "$withdrawer_pubkey" 1.5 --from "$install_dir/identity.json" --allow-unfunded-recipient --fee-payer "$install_dir/identity.json"
 
-# Verify if the transfer was successful
-attempt=0
-max_attempts=5
-while [ $attempt -lt $max_attempts ]; do
-    balance=$(solana balance $withdrawer_pubkey | awk '{print $1}')
-    if (( $(echo "$balance >= 1.5" | bc -l) )); then
-        print_color "success" "Withdrawer wallet funded with $balance SOL."
-        break
-    else
-        attempt=$(( $attempt + 1 ))
-        print_color "info" "Attempt $attempt/$max_attempts: Waiting for funds to appear in withdrawer wallet..."
-        sleep 30  # Wait before retrying
-    fi
-done
-
-if [ $attempt -eq $max_attempts ]; then
-    print_color "error" "Failed to get 1.5 SOL in the withdrawer wallet. Exiting."
+# Set Solana CLI to use withdrawer keypair
+print_color "info" "Configuring Solana CLI to use the withdrawer keypair..."
+solana config set -k "$HOME/.config/solana/withdrawer.json"
+if [ $? -eq 0 ]; then
+    print_color "success" "Switched to withdrawer keypair."
+else
+    print_color "error" "Failed to switch to withdrawer keypair."
     exit 1
 fi
 
+# Call the function to check the balance
+check_withdrawer_balance
+
+# Verify if the transfer was successful
 if [ $? -eq 0 ]; then
     print_color "info" "Waiting 30 seconds to confirm funds in withdrawer wallet..."
     sleep 30
@@ -270,16 +264,6 @@ if [ $? -eq 0 ]; then
     fi
 else
     print_color "error" "Failed to transfer 1.5 SOL from the identity wallet. Exiting."
-    exit 1
-fi
-
-# Set Solana CLI to use withdrawer keypair
-print_color "info" "Configuring Solana CLI to use the withdrawer keypair..."
-solana config set -k "$HOME/.config/solana/withdrawer.json"
-if [ $? -eq 0 ]; then
-    print_color "success" "Switched to withdrawer keypair."
-else
-    print_color "error" "Failed to switch to withdrawer keypair."
     exit 1
 fi
 
