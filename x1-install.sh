@@ -279,16 +279,6 @@ fi
 # Change directory to validator installation directory
 cd "$install_dir"
 
-# Fund the existing stake account with 1 SOL
-print_color "info" "Funding existing stake account with 1 SOL..."
-solana transfer "$stake_pubkey" 1 --from "$install_dir/identity.json" --fee-payer "$install_dir/identity.json"
-if [ $? -eq 0 ]; then
-    print_color "success" "1 SOL successfully added to the existing stake account."
-else
-    print_color "error" "Failed to fund the existing stake account."
-    exit 1
-fi
-
 # Create the vote account with 10% commission
 print_color "info" "Creating vote account with 10% commission..."
 solana create-vote-account "$install_dir/vote.json" "$install_dir/identity.json" "$withdrawer_pubkey" --commission 10
