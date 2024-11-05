@@ -279,13 +279,13 @@ fi
 # Change directory to validator installation directory
 cd "$install_dir"
 
-# Create the stake account
-print_color "info" "Creating stake account with 1 SOL..."
-solana create-stake-account "$install_dir/stake.json" 1
+# Fund the existing stake account with 1 SOL
+print_color "info" "Funding existing stake account with 1 SOL..."
+solana transfer "$stake_pubkey" 1 --from "$install_dir/identity.json" --fee-payer "$install_dir/identity.json"
 if [ $? -eq 0 ]; then
-    print_color "success" "Stake account created."
+    print_color "success" "1 SOL successfully added to the existing stake account."
 else
-    print_color "error" "Failed to create stake account."
+    print_color "error" "Failed to fund the existing stake account."
     exit 1
 fi
 
