@@ -291,13 +291,37 @@ fi
 
 # Delegate the stake
 print_color "info" "Delegating the stake to the vote account..."
-solana delegate-stake "$install_dir/stake.json" "$install_dir/vote.json"
+
+# Check if the vote.json file exists
+if [ -f "$install_dir/vote.json" ]; then
+    print_color "info" "Found vote.json file."
+else
+    print_color "error" "vote.json file not found in $install_dir. Exiting."
+    exit 1
+fi
+
+# Extract the public key from the vote.json file
+vote_pubkey=$(solana-keygen pubkey "$install_dir/vote.json")
+
+# Check if the public key was extracted successfully
+if [ -z "$vote_pubkey" ]; then
+    print_color "error" "Failed to extract the vote account public key. Exiting."
+    exit 1
+else
+    print_color "info" "Vote account public key: $vote_pubkey"
+fi
+
+# Delegate the stake using the vote account public key
+solana delegate-stake "$install_dir/stake.json" "$vote_pubkey"
+
+# Check if the delegation was successful
 if [ $? -eq 0 ]; then
     print_color "success" "Stake successfully delegated."
 else
     print_color "error" "Failed to delegate stake."
     exit 1
 fi
+
 
 # Switch RPC URL to the new endpoint
 print_color "info" "Setting Solana CLI to use the new RPC endpoint..."
