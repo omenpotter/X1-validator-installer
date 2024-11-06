@@ -312,7 +312,6 @@ else
     exit 1
 fi
 
-
 # Switch RPC URL to the new endpoint
 print_color "info" "Setting Solana CLI to use the new RPC endpoint..."
 solana config set -u https://xolana.xen.network
