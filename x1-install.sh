@@ -282,33 +282,46 @@ cd "$install_dir"
 # Delegate the stake
 print_color "info" "Delegating the stake to the vote account..."
 
-# Check if the vote.json file exists
-if [ -f "$install_dir/vote.json" ]; then
-    print_color "info" "Found vote.json file."
-else
-    print_color "error" "vote.json file not found in $install_dir. Exiting."
+# Check if the necessary files exist
+if [ ! -f "$install_dir/vote.json" ] || [ ! -f "$install_dir/stake.json" ] || [ ! -f "$install_dir/identity.json" ]; then
+    print_color "error" "Required key files not found. Exiting."
     exit 1
 fi
 
-# Extract the public key from the vote.json file
+# Extract the public keys
 vote_pubkey=$(solana-keygen pubkey "$install_dir/vote.json")
+stake_pubkey=$(solana-keygen pubkey "$install_dir/stake.json")
 
-# Check if the public key was extracted successfully
-if [ -z "$vote_pubkey" ]; then
-    print_color "error" "Failed to extract the vote account public key. Exiting."
-    exit 1
+# Set the default keypair back to identity for delegation
+solana config set --keypair "$install_dir/identity.json" > /dev/null 2>&1
+
+# Check if the stake account is already delegated
+stake_status=$(solana stake-account "$stake_pubkey" 2>/dev/null)
+if echo "$stake_status" | grep -q "Delegated Vote Account Address"; then
+    print_color "info" "Stake account is already delegated."
 else
-    print_color "info" "Vote account public key: $vote_pubkey"
+    # Delegate the stake using the identity keypair as the fee payer
+    print_color "info" "Delegating stake account $stake_pubkey to vote account $vote_pubkey..."
+    delegation_output=$(solana delegate-stake --fee-payer "$install_dir/identity.json" "$install_dir/stake.json" "$vote_pubkey" 2>&1)
+    
+    if [ $? -eq 0 ]; then
+        print_color "success" "Stake successfully delegated."
+    else
+        print_color "error" "Failed to delegate stake: $delegation_output"
+        print_color "info" "Checking identity balance..."
+        solana balance "$install_dir/identity.json"
+        exit 1
+    fi
 fi
 
-# Delegate the stake using the vote account public key
-solana delegate-stake "$install_dir/stake.json" "$vote_pubkey"
-
-# Check if the delegation was successful
-if [ $? -eq 0 ]; then
-    print_color "success" "Stake successfully delegated."
+# Verify delegation
+print_color "info" "Verifying stake delegation..."
+sleep 10  # Wait for transaction to be confirmed
+stake_status=$(solana stake-account "$stake_pubkey" 2>/dev/null)
+if echo "$stake_status" | grep -q "Delegated Vote Account Address"; then
+    print_color "success" "Stake delegation verified successfully."
 else
-    print_color "error" "Failed to delegate stake."
+    print_color "error" "Stake delegation verification failed. Please check manually."
     exit 1
 fi
 
