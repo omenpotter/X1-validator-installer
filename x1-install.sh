@@ -46,7 +46,6 @@ mkdir -p "$install_dir" > /dev/null 2>&1
 cd "$install_dir" || exit 1
 print_color "success" "Directory created: $install_dir"
 
-
 # Section 2: Install Rust
 print_color "info" "\n===== 2/10: Rust Installation ====="
 
@@ -179,7 +178,7 @@ print_color "info" "\n===== 8/10: Creating Stake Account ====="
 stake_amount=1.5  # Fixed amount for stake account
 
 if (( $(echo "$balance >= $stake_amount" | bc -l) )); then
-    print_color "info" "Staking $stake_amount SOL."
+    print_color "info" "Creating stake account with $stake_amount SOL."
 
     solana create-stake-account $install_dir/stake.json $stake_amount
     if [ $? -eq 0 ]; then
@@ -210,18 +209,13 @@ sudo sysctl -p /etc/sysctl.d/21-solana-validator.conf
 # Set ulimit for current session
 ulimit -n 1000000
 
-# Ensure Solana CLI is in PATH
-export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-
-print_color "success" "System tuned for validator performance."
-
 # Section 10: Validator Startup Configuration
 print_color "info" "\n===== 10/10: Validator Startup Configuration ====="
 
 # Create validator startup script
 VALIDATOR_SCRIPT="$install_dir/start-validator.sh"
 
-# Create the startup script with proper settings
+# Create the startup script with proper settings and output logging
 cat > "$VALIDATOR_SCRIPT" << 'EOF'
 #!/bin/bash
 
@@ -235,15 +229,19 @@ ulimit -n 1000000
 LEDGER_DIR="$HOME/x1_validator/ledger"
 mkdir -p "$LEDGER_DIR"
 
-# Start the validator
-solana-validator \
+# Create log directory
+LOG_DIR="$HOME/x1_validator/logs"
+mkdir -p "$LOG_DIR"
+
+# Start the validator with output logging
+exec solana-validator \
   --identity "$HOME/x1_validator/identity.json" \
   --vote-account "$HOME/x1_validator/vote.json" \
   --ledger "$LEDGER_DIR" \
   --rpc-port 8899 \
   --entrypoint 216.202.227.220:8001 \
   --full-rpc-api \
-  --log - \
+  --log "$LOG_DIR/validator.log" \
   --max-genesis-archive-unpacked-size 1073741824 \
   --no-incremental-snapshots \
   --require-tower \
@@ -254,13 +252,13 @@ solana-validator \
   --bind-address 0.0.0.0 \
   --private-rpc \
   --dynamic-port-range 8000-8020 \
-  --wal-recovery-mode skip_any_corrupted_record
+  --wal-recovery-mode skip_any_corrupted_record 2>&1 | tee -a "$LOG_DIR/validator.log"
 EOF
 
 # Make the script executable
 chmod +x "$VALIDATOR_SCRIPT"
 
-# Create systemd service file
+# Create systemd service file with enhanced logging
 sudo tee /etc/systemd/system/solana-validator.service > /dev/null << EOF
 [Unit]
 Description=Solana Validator
@@ -274,7 +272,9 @@ RestartSec=1
 User=$USER
 LimitNOFILE=1000000
 Environment="PATH=$PATH:/home/$USER/.local/share/solana/install/active_release/bin"
-ExecStart=$VALIDATOR_SCRIPT
+ExecStart=/bin/bash -c '$VALIDATOR_SCRIPT'
+StandardOutput=append:$HOME/x1_validator/logs/validator.log
+StandardError=append:$HOME/x1_validator/logs/validator.log
 
 [Install]
 WantedBy=multi-user.target
@@ -283,39 +283,65 @@ EOF
 # Reload systemd
 sudo systemctl daemon-reload
 
-print_color "success" "\nX1 Validator setup complete!"
-print_color "info" "\nYou have two options to start your validator:"
-
-print_color "prompt" "\n1. Run as a systemd service (recommended for production):"
-echo "sudo systemctl enable solana-validator"
-echo "sudo systemctl start solana-validator"
-echo "sudo systemctl status solana-validator"
-
-print_color "prompt" "\n2. Run directly (recommended for testing):"
-echo "bash $VALIDATOR_SCRIPT"
-
-print_color "info" "\nTo monitor your validator:"
-echo "solana gossip"
-echo "solana stakes $vote_pubkey"
-echo "solana validators"
-
-print_color "error" "\nIMPORTANT REMINDERS:"
-print_color "info" "1. Your validator keys are stored in: $install_dir"
-print_color "info" "2. Validator logs can be viewed with: journalctl -u solana-validator -f"
-print_color "info" "3. Make sure ports 8000-8020 are open in your firewall"
-print_color "info" "4. Monitor your validator's performance regularly"
-
-print_color "prompt" "\nDo you want to start the validator now? [y/n]"
+print_color "prompt" "\nDo you want to start the validator and delegate stake now? [y/n]"
 read start_choice
 
 if [ "$start_choice" == "y" ]; then
-    print_color "info" "Starting validator service..."
-    sudo systemctl enable solana-validator
-    sudo systemctl start solana-validator
+    print_color "info" "Preparing validator startup..."
+    
+    # Switch to identity keypair for delegation
+    solana config set --keypair "$install_dir/identity.json" > /dev/null 2>&1
+    
+    # Get public keys
+    identity_pubkey=$(solana-keygen pubkey "$install_dir/identity.json")
+    vote_pubkey=$(solana-keygen pubkey "$install_dir/vote.json")
+    stake_pubkey=$(solana-keygen pubkey "$install_dir/stake.json")
+    
+    print_color "info" "Checking account balances..."
+    identity_balance=$(solana balance "$identity_pubkey")
+    stake_balance=$(solana balance "$stake_pubkey")
+    
+    print_color "info" "Identity balance: $identity_balance SOL"
+    print_color "info" "Stake account balance: $stake_balance SOL"
+    
+    # Check if stake is already delegated
+    print_color "info" "Checking stake delegation status..."
+    stake_status=$(solana stake-account "$stake_pubkey" 2>/dev/null)
+    
+    if ! echo "$stake_status" | grep -q "Delegated Vote Account Address"; then
+        print_color "info" "Delegating stake to vote account..."
+        
+        # Delegate stake
+        delegation_output=$(solana delegate-stake \
+            --fee-payer "$install_dir/identity.json" \
+            "$install_dir/stake.json" \
+            "$vote_pubkey" 2>&1)
+        
+        if [ $? -eq 0 ]; then
+            print_color "success" "Stake successfully delegated to vote account"
+        else
+            print_color "error" "Failed to delegate stake: $delegation_output"
+            print_color "error" "Please check your account balances and try again"
+            exit 1
+        fi
+        
+        # Wait for delegation to be confirmed
+        print_color "info" "Waiting for stake delegation to be confirmed..."
+        sleep 10
+    else
+        print_color "success" "Stake is already delegated to vote account"
+    fi
+    
+    # Verify delegation
+    stake_info=$(solana stake-account "$stake_pubkey")
+    print_color "info" "Stake account status:"
+    echo "$stake_info"
+    
+    # Start the validator
+    print_color "info" "Starting validator..."
+    print_color "info" "Real-time validator output will be displayed below. Press Ctrl+C to stop viewing the output (validator will continue running in background)."
+    print_color "info" "Starting in 5 seconds..."
     sleep 5
-    sudo systemctl status solana-validator
-else
-    print_color "info" "You can start the validator later using the commands shown above."
-fi
-
-print_color "success" "Setup complete! Your validator is ready to run."
+    
+    # Start the validator in the background
+    sudo systemctl enable solana-validator
