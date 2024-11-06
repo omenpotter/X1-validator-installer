@@ -215,141 +215,107 @@ export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
 
 print_color "success" "System tuned for validator performance."
 
-# Section 10: Create and Start Validator Service
-print_color "info" "\n===== 10/10: Finished ====="
+# Section 10: Validator Startup Configuration
+print_color "info" "\n===== 10/10: Validator Startup Configuration ====="
 
-# Set the installation directory
-install_dir="$HOME/x1_validator"
-mkdir -p "$install_dir"
+# Create validator startup script
+VALIDATOR_SCRIPT="$install_dir/start-validator.sh"
 
-# Check for required keypairs
-print_color "info" "Checking for required keypairs..."
-if [ ! -f "$install_dir/identity.json" ] || [ ! -f "$install_dir/vote.json" ] || [ ! -f "$install_dir/stake.json" ]; then
-    print_color "error" "Required keypair files not found in $install_dir. Exiting."
-    exit 1
-fi
-print_color "success" "All keypair files are present."
+# Create the startup script with proper settings
+cat > "$VALIDATOR_SCRIPT" << 'EOF'
+#!/bin/bash
 
-# Set the default keypair to identity keypair
-print_color "info" "Setting default keypair to identity keypair..."
-solana config set --keypair "$install_dir/identity.json"
+# Source environment variables
+export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
 
-# Get the public key of the withdrawer wallet
-withdrawer_pubkey=$(solana address -k "$HOME/.config/solana/withdrawer.json")
+# Set ulimit
+ulimit -n 1000000
 
-# Fund the withdrawer wallet with 1.5 SOL from the identity wallet
-print_color "info" "Funding withdrawer wallet with 1.5 SOL from identity wallet..."
-transfer_output=$(solana transfer "$withdrawer_pubkey" 1.5 --from "$install_dir/identity.json" --allow-unfunded-recipient --fee-payer "$install_dir/identity.json" 2>&1)
-if [ $? -ne 0 ]; then
-    print_color "error" "Failed to transfer 1.5 SOL from the identity wallet: $transfer_output"
-    exit 1
-fi
-
-# Set Solana CLI to use withdrawer keypair
-print_color "info" "Configuring Solana CLI to use the withdrawer keypair..."
-solana config set -k "$HOME/.config/solana/withdrawer.json"
-if [ $? -eq 0 ]; then
-    print_color "success" "Switched to withdrawer keypair."
-else
-    print_color "error" "Failed to switch to withdrawer keypair."
-    exit 1
-fi
-
-# Call the function to check the balance
-
-# Verify if the transfer was successful
-print_color "info" "Waiting 30 seconds to confirm funds in withdrawer wallet..."
-sleep 30
-balance=$(solana balance "$withdrawer_pubkey" | awk '{print $1}')
-
-# Verify that the balance is a valid number
-if [[ $balance =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-    # Check if the balance is greater than or equal to 1.5 SOL
-    if (( $(echo "$balance >= 1.5" | bc -l) )); then
-        print_color "success" "Withdrawer wallet funded with $balance SOL."
-    else
-        print_color "error" "Failed to get 1.5 SOL in the withdrawer wallet. Current balance is $balance SOL."
-        exit 1
-    fi
-else
-    print_color "error" "Error: Unable to fetch a valid balance. Current output: $balance"
-    exit 1
-fi
-
-# Change directory to validator installation directory
-cd "$install_dir"
-
-# Delegate the stake
-print_color "info" "Delegating the stake to the vote account..."
-
-# Check if the necessary files exist
-if [ ! -f "$install_dir/vote.json" ] || [ ! -f "$install_dir/stake.json" ] || [ ! -f "$install_dir/identity.json" ]; then
-    print_color "error" "Required key files not found. Exiting."
-    exit 1
-fi
-
-# Extract the public keys
-vote_pubkey=$(solana-keygen pubkey "$install_dir/vote.json")
-stake_pubkey=$(solana-keygen pubkey "$install_dir/stake.json")
-
-# Set the default keypair back to identity for delegation
-solana config set --keypair "$install_dir/identity.json" > /dev/null 2>&1
-
-# Check if the stake account is already delegated
-stake_status=$(solana stake-account "$stake_pubkey" 2>/dev/null)
-if echo "$stake_status" | grep -q "Delegated Vote Account Address"; then
-    print_color "info" "Stake account is already delegated."
-else
-    # Delegate the stake using the identity keypair as the fee payer
-    print_color "info" "Delegating stake account $stake_pubkey to vote account $vote_pubkey..."
-    delegation_output=$(solana delegate-stake --fee-payer "$install_dir/identity.json" "$install_dir/stake.json" "$vote_pubkey" 2>&1)
-    
-    if [ $? -eq 0 ]; then
-        print_color "success" "Stake successfully delegated."
-    else
-        print_color "error" "Failed to delegate stake: $delegation_output"
-        print_color "info" "Checking identity balance..."
-        solana balance "$install_dir/identity.json"
-        exit 1
-    fi
-fi
-
-# Verify delegation
-print_color "info" "Verifying stake delegation..."
-sleep 10  # Wait for transaction to be confirmed
-stake_status=$(solana stake-account "$stake_pubkey" 2>/dev/null)
-if echo "$stake_status" | grep -q "Delegated Vote Account Address"; then
-    print_color "success" "Stake delegation verified successfully."
-else
-    print_color "error" "Stake delegation verification failed. Please check manually."
-    exit 1
-fi
-
-# Switch RPC URL to the new endpoint
-print_color "info" "Setting Solana CLI to use the new RPC endpoint..."
-solana config set -u https://xolana.xen.network
-network_url=$(solana config get | grep 'RPC URL' | awk '{print $NF}')
-if [ "$network_url" == "https://xolana.xen.network" ]; then
-    print_color "success" "RPC URL set to $network_url."
-else
-    print_color "error" "Failed to set RPC URL."
-    exit 1
-fi
+# Create ledger directory if it doesn't exist
+LEDGER_DIR="$HOME/x1_validator/ledger"
+mkdir -p "$LEDGER_DIR"
 
 # Start the validator
-print_color "info" "Starting the Solana validator..."
-print_color "prompt" "Run the following command to start your validator:"
-echo -e "\nexport PATH=\"\$HOME/.local/share/solana/install/active_release/bin:\$PATH\"; \\
-ulimit -n 1000000; \\
-solana-validator --identity $install_dir/identity.json --vote-account $install_dir/vote.json --rpc-port 8899 \\
---entrypoint 216.202.227.220:8001 --full-rpc-api --log - --max-genesis-archive-unpacked-size 1073741824 \\
---no-incremental-snapshots --require-tower --enable-rpc-transaction-history \\
---enable-extended-tx-metadata-storage --skip-startup-ledger-verification \\
---no-poh-speed-test --bind-address 0.0.0.0"
+solana-validator \
+  --identity "$HOME/x1_validator/identity.json" \
+  --vote-account "$HOME/x1_validator/vote.json" \
+  --ledger "$LEDGER_DIR" \
+  --rpc-port 8899 \
+  --entrypoint 216.202.227.220:8001 \
+  --full-rpc-api \
+  --log - \
+  --max-genesis-archive-unpacked-size 1073741824 \
+  --no-incremental-snapshots \
+  --require-tower \
+  --enable-rpc-transaction-history \
+  --enable-extended-tx-metadata-storage \
+  --skip-startup-ledger-verification \
+  --no-poh-speed-test \
+  --bind-address 0.0.0.0 \
+  --private-rpc \
+  --dynamic-port-range 8000-8020 \
+  --wal-recovery-mode skip_any_corrupted_record
+EOF
 
-print_color "success" "Script execution completed. Validator setup is ready."
+# Make the script executable
+chmod +x "$VALIDATOR_SCRIPT"
+
+# Create systemd service file
+sudo tee /etc/systemd/system/solana-validator.service > /dev/null << EOF
+[Unit]
+Description=Solana Validator
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=$USER
+LimitNOFILE=1000000
+Environment="PATH=$PATH:/home/$USER/.local/share/solana/install/active_release/bin"
+ExecStart=$VALIDATOR_SCRIPT
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Reload systemd
+sudo systemctl daemon-reload
 
 print_color "success" "\nX1 Validator setup complete!"
-print_color "success" "\nStart your X1 Validator by using the following command:"
-print_color "prompt" "\nexport PATH=\"\$HOME/.local/share/solana/install/active_release/bin:\$PATH\"; ulimit -n 1000000; solana-validator --identity $install_dir/identity.json --vote-account $install_dir/vote.json --rpc-port 8899 --entrypoint 216.202.227.220:8001 --full-rpc-api --log - --max-genesis-archive-unpacked-size 1073741824 --no-incremental-snapshots --require-tower --enable-rpc-transaction-history --enable-extended-tx-metadata-storage --skip-startup-ledger-verification --no-poh-speed-test --bind-address 0.0.0.0"
-print_color "info" "\n\n\n"
+print_color "info" "\nYou have two options to start your validator:"
+
+print_color "prompt" "\n1. Run as a systemd service (recommended for production):"
+echo "sudo systemctl enable solana-validator"
+echo "sudo systemctl start solana-validator"
+echo "sudo systemctl status solana-validator"
+
+print_color "prompt" "\n2. Run directly (recommended for testing):"
+echo "bash $VALIDATOR_SCRIPT"
+
+print_color "info" "\nTo monitor your validator:"
+echo "solana gossip"
+echo "solana stakes $vote_pubkey"
+echo "solana validators"
+
+print_color "error" "\nIMPORTANT REMINDERS:"
+print_color "info" "1. Your validator keys are stored in: $install_dir"
+print_color "info" "2. Validator logs can be viewed with: journalctl -u solana-validator -f"
+print_color "info" "3. Make sure ports 8000-8020 are open in your firewall"
+print_color "info" "4. Monitor your validator's performance regularly"
+
+print_color "prompt" "\nDo you want to start the validator now? [y/n]"
+read start_choice
+
+if [ "$start_choice" == "y" ]; then
+    print_color "info" "Starting validator service..."
+    sudo systemctl enable solana-validator
+    sudo systemctl start solana-validator
+    sleep 5
+    sudo systemctl status solana-validator
+else
+    print_color "info" "You can start the validator later using the commands shown above."
+fi
+
+print_color "success" "Setup complete! Your validator is ready to run."
