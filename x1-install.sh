@@ -279,16 +279,6 @@ fi
 # Change directory to validator installation directory
 cd "$install_dir"
 
-# Create the vote account with 10% commission
-print_color "info" "Creating vote account with 10% commission..."
-solana create-vote-account "$install_dir/vote.json" "$install_dir/identity.json" "$withdrawer_pubkey" --commission 10
-if [ $? -eq 0 ]; then
-    print_color "success" "Vote account created."
-else
-    print_color "error" "Failed to create vote account."
-    exit 1
-fi
-
 # Delegate the stake
 print_color "info" "Delegating the stake to the vote account..."
 
